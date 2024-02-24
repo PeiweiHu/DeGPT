@@ -1,0 +1,12 @@
+int Fibon(int param_1) {
+    int iVar1;
+    int iVar2;
+    if ((param_1 == 1) || (param_1 == 2)) {
+        iVar2 = 1;
+    } else {
+        iVar1 = Fibon(param_1 + -1);
+        iVar2 = Fibon(param_1 + -2);
+        iVar2 = iVar2 + iVar1;
+    }
+    return iVar2;
+}

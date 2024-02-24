@@ -1,0 +1,50 @@
+[
+    {
+        "type": "referee",
+        "name": "direction",
+        "prompt": {
+            "role": "user",
+            "content": "For better readability and simplicity, what can be done for the following C language function? List them one by one. Don't show the code. {code}"
+        }
+    },
+    {
+        "type": "advisor",
+        "name": "add_comment",
+        "prompt": {
+            "role": "user",
+            "content": "Help me add code comments for the code snippet in the following C code. No explanation.\n{code}"
+        }
+    },
+    {
+        "type": "advisor",
+        "name": "rename_var",
+        "prompt": {
+            "role": "user",
+            "content": "Help me rename the variables for the code snippet in the following C code. Output the old name and its new name in JSON structure. For example, use {{\"old_name\": \"new_name\"}} to represent replace the variable name \"old_name\" with \"new_name\". No explanation. \\n {code}"
+        }
+    },
+    {
+        "type": "advisor",
+        "name": "rename_func",
+        "prompt": {
+            "role": "user",
+            "content": "Rename the following C function. No explanation. Just output new name with quote, like \"new name\".\n{code}"
+        }
+    },
+    {
+        "type": "advisor",
+        "name": "remove_unnecessary",
+        "prompt": {
+            "role": "user",
+            "content": "Simplify the following C function by removing redundant variables and unnecessary code. No explanation. Don't change the variable types and function semantics. \n{code}"
+        }
+    },
+    {
+        "type": "referee",
+        "name": "need",
+        "prompt": {
+            "role": "user",
+            "content": "Do you think the following code needs structure simplification, comment appending, and variable renaming? Answer three yes or no in order. No explanation. \n{code}"
+        }
+    }
+]
