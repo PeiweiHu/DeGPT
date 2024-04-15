@@ -20,7 +20,7 @@
         "name": "rename_var",
         "prompt": {
             "role": "user",
-            "content": "Help me rename the variables for the code snippet in the following C code. Output the old name and its new name in a *single* JSON dictionary. For example, use {{\"old_name\": \"new_name\"}} to represent replace the variable name \"old_name\" with \"new_name\". No explanation. \\n {code}"
+            "content": "Help me rename the variables for the code snippet in the following C code. Output the old name and its new name in a *single* JSON dictionary. Do not use any markdown formatting. For example, use {{\"old_name\": \"new_name\"}} to represent replace the variable name \"old_name\" with \"new_name\". No explanation. \\n {code}"
         }
     },
     {
