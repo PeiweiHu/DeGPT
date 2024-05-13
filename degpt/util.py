@@ -4,31 +4,12 @@ import logging
 import math
 from typing import List, Tuple, Dict, Optional
 import tiktoken
-from sentence_transformers import SentenceTransformer, util
 from cinspector.interfaces import CCode
 from cinspector.nodes import CallExpressionNode, BasicNode
 
 
 FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(FILE_DIR, 'log.log')
-
-class Diff:
-    """
-    Used to locate how chatgpt changes the code
-
-    Attributes:
-        src: original code
-        tgt: changed code (by chatgpt)
-    """
-
-    def __init__(self, src: str, tgt: str):
-        import difflib
-        self.src = src
-        self.tgt = tgt
-        self.d = difflib.Differ()
-
-    def diff(self) -> List[str]:
-        return self.d.compare(self.src.splitlines(), self.tgt.splitlines())
 
 
 def halstead_metric(code: str) -> Optional[Dict[str, float]]:
@@ -224,60 +205,6 @@ def all_invocations(func_src: str) -> Optional[List[str]]:
     return [_.function.src for _ in calls if _.is_indirect()]
 
 
-class Evaluation:
-    def __init__(self) -> None:
-        self.model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-
-    def pair_similarity(self, sent1: str, sent2: str) -> float:
-        """
-        calculate the similarity between sent1 and sent2
-        """
-        # first we use ProcessName to process the naming style
-        pn = ProcessName()
-        sent1 = ' '.join(pn.process_name_style(sent1))
-        sent2 = ' '.join(pn.process_name_style(sent2))
-        embedding1 = self.model.encode(sent1, convert_to_tensor=True)
-        embedding2 = self.model.encode(sent2, convert_to_tensor=True)
-        return float(util.pytorch_cos_sim(embedding1, embedding2).item())
-
-    def best_similarity(self, name: str, lst: List[str]) -> tuple:
-        """
-        Given name and lst, calculate which entry in lst has the highest
-        similarity with name.
-
-        Return:
-            A tuple containing the entry and similarity
-        """
-        best = -1
-        content = None
-        for _ in lst:
-            similarity = self.pair_similarity(name, _)
-            if similarity > best:
-                best = similarity
-                content = _
-        return (content, best)
-
-    """
-    Currently, we define several simple and direct evaluation indicators
-    """
-
-    def eva_best_average(self, cur_name: List[str], benchmark: List[str]) -> Tuple[float, Dict]:
-        """
-        For each entry in cur_name, we get its highest similarity compared
-        with the entries in benchmark. Then we calculate the average value
-        of these highest similarity values and return it.
-        """
-
-        similarity_sum = 0
-        best_dic = dict()
-        for _c in cur_name:
-            content, best = self.best_similarity(_c, benchmark)
-            similarity_sum += best
-            best_dic[_c] = content
-
-        return (similarity_sum / len(cur_name), best_dic)
-
-
 class ProcessName:
     """
     Used to process the variale name
@@ -286,7 +213,7 @@ class ProcessName:
     def __init__(self) -> None:
         pass
 
-    def complement(self, name: list) -> str:
+    def complement(self, name: list) -> list:
         """
         complement() is used to complement the abbr
 
@@ -334,8 +261,8 @@ class ProcessName:
         return rtn_lst
 
     def process_name_style(self, name: str) -> list:
-        name = [name]
-        split_name = self.split_uppercase(self.split_underscore(name))
+        name_lst = [name]
+        split_name = self.split_uppercase(self.split_underscore(name_lst))
         return self.filter(self.complement(split_name))
 
 

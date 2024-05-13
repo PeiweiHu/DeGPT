@@ -21,22 +21,19 @@ q3: update the bare_query-related stuffs. We wanna store all prompts in it.
 import os
 import re
 import sys
-import ctypes
-import random
+import traceback
 import json
 import argparse
 import signal
-import threading
-from concurrent import futures
-from enum import Enum, IntEnum, unique
+from enum import Enum, unique
 from typing import Optional, Dict, List, Tuple
 from cinspector.interfaces import CCode
-from chatmanager import ChatManager, ChatMessage, ChatResponse, ChatSetup
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(DIR, '.'))
-from util import Evaluation, Log, is_code_in_response, response_filter
+from util import Log, is_code_in_response, response_filter
 from mssc import SemanticComparison
+from chat import QueryChatGPT
 
 
 logger = Log().get(__file__)
@@ -45,9 +42,6 @@ logger = Log().get(__file__)
 # ------------------- config here ---------------------
 
 PROMPT_PATH = os.path.join(DIR, 'prompt.json')
-CHATGPT_API_KEY = None
-ChatSetup.temperature = 0.2
-assert (CHATGPT_API_KEY and "Pleae set api key")
 # -----------------------------------------------------
 
 
@@ -131,14 +125,10 @@ class Advisor(Role):
         get_advice(code: str, dtype: DType): Let chatgpt give detailed modification method for code based on dtype
     """
 
-    def __init__(self, cm: ChatManager = ChatManager()):
-        self.cm: ChatManager = cm
-        # self.cm.add_chat('system', 'You provide the programming suggestions.')
-
+    def __init__(self):
         self.dtype_mapping = {
             DType.ADD_COMMENT: self._add_comment,
             DType.RENAME_VAR: self._rename_var,
-            # DType.RENAME_FUNC_PARA: self._rename_func,
             DType.SIMPLIFY: self._simplify,
         }
 
@@ -177,10 +167,9 @@ class Advisor(Role):
         prompt = get_prompt('rename_var', 'advisor')
         assert (prompt)
         if not response:
-            cmsg = ChatMessage()
-            cmsg.push_system('You provide the programming suggestions.')
-            cmsg.push_user(prompt['content'].format(code=code))
-            response = self.cm.send(cmsg).get_msg()
+            q = QueryChatGPT()
+            q.insert_system_prompt('You provide the programming suggestions.')
+            response = q.query(prompt['content'].format(code=code))
 
         assert(isinstance(response, str))
 
@@ -230,12 +219,9 @@ class Advisor(Role):
         """
         prompt = get_prompt('add_comment', 'advisor')
         assert(prompt)
-        cmsg = ChatMessage()
-        cmsg.push_system('You provide the programming suggestions.')
-        cmsg.push_user(prompt['content'].format(code=code))
-        response = self.cm.send(cmsg)
-        assert (isinstance(response, ChatResponse))
-        response = response.get_msg()
+        q = QueryChatGPT()
+        q.insert_system_prompt('You provide the programming suggestions.')
+        response = q.query(prompt['content'].format(code=code))
         assert (isinstance(response, str))
         response = response_filter(response)
         if not is_code_in_response(code, response):
@@ -248,12 +234,9 @@ class Advisor(Role):
         """
         prompt = get_prompt('remove_unnecessary', 'advisor')
         assert(prompt)
-        cmsg = ChatMessage()
-        cmsg.push_system('You provide the programming suggestions.')
-        cmsg.push_user(prompt['content'].format(code=code))
-        response = self.cm.send(cmsg)
-        assert (isinstance(response, ChatResponse))
-        response = response.get_msg()
+        q = QueryChatGPT()
+        q.insert_system_prompt('You provide the programming suggestions.')
+        response = q.query(prompt['content'].format(code=code))
         assert (isinstance(response, str))
         response = response_filter(response)
         # here we extract the function to avoid to additional info from ChatGPT
@@ -268,8 +251,8 @@ class Operator(Role):
     """
     Adopt the advice from advisor, ensure the original semantic.
     """
-    def __init__(self, cm: ChatManager = ChatManager()):
-        self.cm: ChatManager = cm
+    def __init__(self):
+        pass
 
     def operate(self, original_code: str, advised_code: str, dtype: DType) -> str:
         """
@@ -287,10 +270,6 @@ class Operator(Role):
         if dtype == DType.ADD_COMMENT:
             return advised_code
         elif dtype == DType.RENAME_VAR:
-            # currently no check
-            return advised_code
-        elif dtype == DType.RENAME_FUNC_PARA:
-            # currently no check
             return advised_code
         elif dtype == DType.SIMPLIFY:
             semantic_cmp = SemanticComparison(original_code, advised_code)
@@ -300,7 +279,7 @@ class Operator(Role):
             else:
                 return original_code
         else:
-            logger.warning(f"The operate on {dtype} is not implemented, skip this change")
+            logger.warning(f"The operator on {dtype} is not implemented, skip this change")
 
         return original_code
 
@@ -315,10 +294,10 @@ class Referee(Role):
     Methods:
         get_direction: get the direction for the code change
     """
-    def __init__(self, cm: ChatManager = ChatManager()):
-        self.cm: ChatManager = cm
+    def __init__(self):
+        pass
 
-    def get_direction(self, code: str) -> Tuple[str, List[Optional[DType]]]:
+    def get_direction(self, code: str) -> Tuple[str, List[DType]]:
         """
         Get the direction for the code change.
 
@@ -331,77 +310,15 @@ class Referee(Role):
         assert(prompt)
 
         # complement the prompt with the code
-        cmsg = ChatMessage()
-        cmsg.push_system('You provide the programming suggestions.')
-        cmsg.push_user(prompt['content'].format(code=code))
-        response = self.cm.send(cmsg).get_msg()
-        # print(response)
+        q = QueryChatGPT()
+        q.insert_system_prompt('You provide the programming suggestions')
+        response = q.query(prompt['content'].format(code=code))
         assert (isinstance(response, str))
         logger.info('[Referee] response: {}'.format(response))
-        # directions = self._parse_direction(code, response)
-        directions = self._parse_need(code, response)
+        directions = self._parse_need(response)
         return (response, directions)
 
-    def _construct_dtype_template(self) -> Dict[DType, List[str]]:
-        """
-        construct the template for the dtype for the similarity calculation
-        """
-        dtype_template = dict()
-        # ADD_COMMENT
-        dtype_template[DType.ADD_COMMENT] = [
-                'Add comment to explain the purpose',
-            ]
-        # RENAME_VAR
-        dtype_template[DType.RENAME_VAR] = [
-                'Rename variables to more descriptive names',
-                'Use meaningful variable names that reflect the purpose of the variable and make the code easier to understand.',
-            ]
-        # SEGMENT
-        dtype_template[DType.SEGMENT] = [
-                # 'Break up the code into smaller functions',
-                'this is currently forbidden',
-            ]
-        # FORMAT
-        dtype_template[DType.FORMAT] = [
-                'Use consistent and clear formatting throughout the code',
-            ]
-        # RENAME_FUNCN_PARA
-        dtype_template[DType.RENAME_FUNC_PARA] = [
-                # 'Use meaningful function and parameter names',
-                'this is currently forbidden',
-            ]
-        # SIMPLIFY
-        dtype_template[DType.SIMPLIFY] = [
-                'Simplify the function by removing unnecessary code and comments',
-                'Break down the function into smaller, more manageable functions that carry out specific tasks.'
-                'Break up the code into smaller functions',
-            ]
-
-        return dtype_template
-
-    def _conclude_dtype(self, suggestion: str) -> Optional[DType]:
-        """
-        read in the suggestion from referee and output the dtype it belongs to
-        """
-
-        threshold = 0.4
-        max_sim = 0
-        dtype = None
-        eva = Evaluation()
-
-        for _k, _v in self._construct_dtype_template().items():
-            for _sent in _v:
-                sim = eva.pair_similarity(_sent, suggestion)
-                # logger.debug('[Referee] calculate sim: {}\n{}\n{}\n'.format(sim, _sent, suggestion))
-                if sim > max_sim:
-                    max_sim = sim
-                    dtype = _k
-
-        if max_sim < threshold:
-            return None
-        return dtype
-
-    def _parse_need(self, code: str, response: str) -> List[DType]:
+    def _parse_need(self, response: str) -> List[DType]:
         rtn = []
         pattern = r'\b(?:Yes|yes|No|no)\b'
         matches = re.findall(pattern, response)
@@ -414,27 +331,13 @@ class Referee(Role):
             rtn.append(DType.RENAME_VAR)
         return rtn
 
-    def _parse_direction(self, code: str, response: str) -> List[Optional[DType]]:
-        """
-        iterate each suggestion and classify it into a dtype by
-        similarity calculation
-        """
-
-        dtype_lst = list()
-        lines = response.split('\n')
-        for _l in lines:
-            _l = _l.strip()
-            dtype = self._conclude_dtype(_l)
-            dtype_lst.append(dtype)
-        return dtype_lst
-
 
 class RoleModel:
     """
     manage the workflow of the three-role model
     """
 
-    def __init__(self, *, decompile_code: Optional[str] = None, src_code: Optional[str] = None, cm: ChatManager = ChatManager()):
+    def __init__(self, *, decompile_code: Optional[str] = None, src_code: Optional[str] = None):
         """
         Args:
             code: decompiler output of the function
@@ -444,19 +347,9 @@ class RoleModel:
 
         self.code = decompile_code
         self.src_code = src_code
-        self.cm = cm
-        if not self.cm.keys.key_name_exist('key1'):
-            self.cm.add_key('key1', CHATGPT_API_KEY)
-        self.cm.set_session('default')
-        self.advisor = Advisor(self.cm)
-        self.operator = Operator(self.cm)
-        self.referee = Referee(self.cm)
-
-    def save_session(self, path: str):
-        exported_json_str = self.cm.export_session()
-        assert (isinstance(exported_json_str, str))
-        with open(path, 'w') as w:
-            w.write(exported_json_str)
+        self.advisor = Advisor()
+        self.operator = Operator()
+        self.referee = Referee()
 
     def sort_directions(self, direction_lst: List[DType]) -> List[str]:
         """
@@ -466,8 +359,8 @@ class RoleModel:
 
         sort_index = {
             DType.SIMPLIFY: 0,  # highest priority
-            DType.ADD_COMMENT: 0.5,
-            DType.RENAME_VAR: 1,
+            DType.ADD_COMMENT: 1,
+            DType.RENAME_VAR: 0.5,
         }
 
         sorted_directions = list()
@@ -491,9 +384,6 @@ class RoleModel:
                     break
 
         return sorted_directions
-
-    def __del__(self):
-        self.save_session('session.json')
 
     @staticmethod
     def sub_wf(wf1: str, wf2: str) -> int:
@@ -675,7 +565,6 @@ class RoleModel:
                 optimization['status'] = 'SUCC'
                 optimization['output'] = optimization['operator']
 
-
             # check SIMPLIFY
             if _direction == 'SIMPLIFY' and self.sub_wf('OPT:SIMPLIFY', res['workflow']) > 0:
                 res['workflow'] = 'OPT:SIMPLIFY'
@@ -744,6 +633,7 @@ def single_run(decompile_code: str, output: str) -> None:
         dic = model.work()
     except Exception as e:
         logger.warning(f"Fail to run due to {e}")
+        print(traceback.format_exc())
         return
 
     with open(output, 'w') as w:
