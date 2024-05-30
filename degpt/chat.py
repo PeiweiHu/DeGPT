@@ -5,16 +5,28 @@ Interfaces to interact with various LLMs
 import json
 import os
 import atexit
+import configparser
 from typing import Dict, Optional, List
 from openai import OpenAI
 
-model = 'gpt-3.5-turbo'
+
+CUR_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG = os.path.join(CUR_DIR, 'config.ini')
 
 
-api_key = None
-api_base = None
-assert (api_key and api_base and "Setup your api_key and api_base first")
-client = OpenAI(api_key=api_key, base_url=api_base)
+def load_config(field: str, value: str) -> str:
+
+    config = configparser.ConfigParser()
+    config.read(CONFIG)
+    return config[field][value]
+
+
+def llm_configured() -> bool:
+    model = load_config('LLM', 'model')
+    api_key = load_config('LLM', 'api_key')
+    api_base = load_config('LLM', 'api_base')
+
+    return bool(len(model) and len(api_key) and len(api_base))
 
 
 class QueryChatGPT():
@@ -63,6 +75,8 @@ class QueryChatGPT():
     def __query(self, prompt: str, model: str) -> Optional[str]:
         self.chat_context.append({"role": "user", "content": prompt})
         self.chat_history.append({"role": "user", "content": prompt})
+
+        client = OpenAI(api_key=load_config('LLM', 'api_key'), base_url=load_config('LLM', 'api_base'))
         response = client.chat.completions.create(
             messages=self.chat_context,  # type: ignore
             model=model,
@@ -84,7 +98,7 @@ class QueryChatGPT():
     def query(self,
               prompt: str,
               *,
-              model: str = model) -> Optional[str]:
+              model: str = load_config('LLM', 'model')) -> Optional[str]:
 
         response = self.__query(prompt, model)
         if not self.use_history:

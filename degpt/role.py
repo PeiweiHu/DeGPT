@@ -4,17 +4,6 @@ We define three roles in this file.
 advisor: output the specific advice, how to change
 operator: partially adopt the advice from advisor, ensure the original semantic
 referee: comment on the changed code, provide next step for refinement
-
-
-q1: Should they share the same session? I will setup a parameter in the constructor,
-so decide this later.
-
-q2: We should do a statistic analysis to decide what kind of changes may be suggested
-by referee, and what kind of specific advice may be suggested by advisor focusing on
-the suggestion of referee.
-
-q3: update the bare_query-related stuffs. We wanna store all prompts in it.
-
 """
 
 
@@ -33,16 +22,13 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(DIR, '.'))
 from util import Log, is_code_in_response, response_filter
 from mssc import SemanticComparison
-from chat import QueryChatGPT
+from chat import QueryChatGPT, llm_configured, load_config
 
 
 logger = Log().get(__file__)
 
 
-# ------------------- config here ---------------------
-
-PROMPT_PATH = os.path.join(DIR, 'prompt.json')
-# -----------------------------------------------------
+PROMPT_PATH = os.path.join(DIR, 'prompt.json')  # file path storing the prompts
 
 
 def run_timer(func, *, args = [], time = 1, info = 'run_timer failed'):
@@ -63,6 +49,16 @@ def run_timer(func, *, args = [], time = 1, info = 'run_timer failed'):
         print(e)
         print(info)
         return None
+
+
+def is_valid_json(data: str) -> bool:
+    """ check whether the data is in json format """
+
+    try:
+        json.loads(data)
+    except ValueError:
+        return False
+    return True
 
 
 def get_prompt(name: str, _type: str, prompt_path: str = PROMPT_PATH) -> Optional[Dict[str, str]]:
@@ -94,14 +90,14 @@ def get_prompt(name: str, _type: str, prompt_path: str = PROMPT_PATH) -> Optiona
 class DType(str, Enum):
     """
     The types of the directions from referee.
+
+    perhaps add more optimization types...
     """
 
     ADD_COMMENT = 'ADD_COMMENT'
     RENAME_VAR = 'RENAME_VAR'
-    SEGMENT = 'SEGMENT'
-    FORMAT = 'FORMAT'
-    RENAME_FUNC_PARA = 'RENAME_FUNC_PARA'
     SIMPLIFY = 'SIMPLIFY'
+    ALL = 'ALL'
 
 
 class Role:
@@ -126,6 +122,7 @@ class Advisor(Role):
     """
 
     def __init__(self):
+
         self.dtype_mapping = {
             DType.ADD_COMMENT: self._add_comment,
             DType.RENAME_VAR: self._rename_var,
@@ -133,7 +130,7 @@ class Advisor(Role):
         }
 
     def get_advice(self, code: str, dtype: DType) -> Tuple[str, Optional[str]]:
-        """Let chatgpt give detailed modification method for code based on dtype
+        """ Let chatgpt give detailed modification method for code based on dtype
 
         This function first finds the corresponding processing method from
         self.dtype_mapping based on dtype, then calls the method to get
@@ -174,25 +171,17 @@ class Advisor(Role):
         assert(isinstance(response, str))
 
         """
-        we do replacement since the json like {'a': 'b'} is treated as invalid
+        TODO (magic): we do replacement since the json like {'a': 'b'} is treated as invalid
         """
         if "':" in response:
             response = response.replace("'", '"')
-
-        import json
-        # the response is excepted to be in JSON format
-        def is_valid_json(data: str) -> bool:
-            try:
-                json.loads(data)
-            except ValueError:
-                return False
-            return True
 
         if not is_valid_json(response):
             logger.warning(f"Fail to rename variables since the response is not valid JSON: {response}")
             return (code, response)
 
         # do replacement, currently we perform very simple replacement
+        # TODO: replace by identifying vairables first by cinspector
         old_new_dic = json.loads(response)
         try:
             """ get all invocation name """
@@ -272,12 +261,16 @@ class Operator(Role):
         elif dtype == DType.RENAME_VAR:
             return advised_code
         elif dtype == DType.SIMPLIFY:
+            return advised_code
+
+            """ TODO: rewrite semantic comparison for better accuracy
             semantic_cmp = SemanticComparison(original_code, advised_code)
             if run_timer(semantic_cmp.is_semantic_equal, time=10):
             # if semantic_cmp.is_semantic_equal():
                 return advised_code
             else:
                 return original_code
+            """
         else:
             logger.warning(f"The operator on {dtype} is not implemented, skip this change")
 
@@ -332,6 +325,18 @@ class Referee(Role):
         return rtn
 
 
+def single_opt(decompile_code: str, opt_type: DType) -> dict:
+    """ execute single optimization assigned by <opt_type> on <decompile_code> """
+
+    dic = {'decompiler_output': decompile_code}
+    advisor = Advisor()
+    advisor_code, response = advisor.get_advice(decompile_code, opt_type)
+    operator = Operator()
+    operator_code = operator.operate(decompile_code, advisor_code, opt_type)
+    dic['output'] = operator_code
+    return dic
+
+
 class RoleModel:
     """
     manage the workflow of the three-role model
@@ -340,9 +345,8 @@ class RoleModel:
     def __init__(self, *, decompile_code: Optional[str] = None, src_code: Optional[str] = None):
         """
         Args:
-            code: decompiler output of the function
-            src_code: the source code of the function
-            cm: ChatManager
+            decompile_code: decompiler output of the function
+            src_code: the source code of the function (used for evaluation, optional)
         """
 
         self.code = decompile_code
@@ -359,8 +363,8 @@ class RoleModel:
 
         sort_index = {
             DType.SIMPLIFY: 0,  # highest priority
-            DType.ADD_COMMENT: 1,
-            DType.RENAME_VAR: 0.5,
+            DType.ADD_COMMENT: 0.5,
+            DType.RENAME_VAR: 1,
         }
 
         sorted_directions = list()
@@ -387,7 +391,7 @@ class RoleModel:
 
     @staticmethod
     def sub_wf(wf1: str, wf2: str) -> int:
-        """ whether wf1 is the later step (or same) of wf2 """
+        """ whether wf1 is the later step (or same) of wf2, wf - workflow """
         dic = {
             'INIT': 0,
             'REFEREE': 1,
@@ -573,6 +577,7 @@ class RoleModel:
             # end check
 
         res['workflow'] = 'DONE'
+        res['output'] = get_optimized_from_dic(res)
         return res
 
 
@@ -626,11 +631,29 @@ def get_optimized_from_dic(dic) -> str:
     return out
 
 
-def single_run(decompile_code: str, output: str) -> None:
+def opt_str2dtype(opt_type: str) -> DType:
+
+    mapping = {
+        'rename': DType.RENAME_VAR,
+        'simplify': DType.SIMPLIFY,
+        'comment': DType.ADD_COMMENT,
+        'all': DType.ALL,
+    }
+
+    return mapping[opt_type]
+
+
+def single_run(decompile_code: str, output: str, opt_type: str) -> None:
+
+    assert (opt_type in ['rename', 'simplify', 'comment', 'all'])
 
     try:
-        model = RoleModel(decompile_code=decompile_code)
-        dic = model.work()
+        if opt_type != 'all':
+            # conduct single optimization
+            dic = single_opt(decompile_code, opt_str2dtype(opt_type))
+        else:
+            model = RoleModel(decompile_code=decompile_code)
+            dic = model.work()
     except Exception as e:
         logger.warning(f"Fail to run due to {e}")
         print(traceback.format_exc())
@@ -640,30 +663,36 @@ def single_run(decompile_code: str, output: str) -> None:
         json.dump(dic, w, indent=4)
 
     print('='*10 + 'after optimization' + '='*10)
-    print(get_optimized_from_dic(dic))
+    print(dic['output'])
 
 
-def single_run_file(decompile_file: str, output: str) -> None:
+def single_run_file(decompile_file: str, output: str, opt_type: str) -> None:
 
     def read_code(f: str) -> str:
         with open(f, 'r') as r:
             return r.read()
 
-    single_run(read_code(decompile_file), output)
+    single_run(read_code(decompile_file), output, opt_type)
 
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='DeGPT: Optimizing Decompiler Output with LLM')
+    parser.add_argument('-t', choices = ['rename', 'simplify', 'comment', 'all'], default='all', help='Assign the optimization type')
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-s', nargs=2, metavar=('decompiler_str', 'output_json'), help='Optimize the decompiler_str')
-    group.add_argument('-f', nargs=2, metavar=('decompiler_file', 'output_json'), help='Optimize the content of the file decompiler_file')
+    group.add_argument('-s', '--string', nargs=2, metavar=('decompiler_str', 'output_json'), help='Optimize the decompiler_str')
+    group.add_argument('-f', '--file', nargs=2, metavar=('decompiler_file', 'output_json'), help='Optimize the content of the file decompiler_file')
     args = parser.parse_args()
     return args
 
 
 if __name__ == '__main__':
+
+    if not llm_configured():
+        print('please complete llm access setup first...')
+        exit()
+
     args = parse_arguments()
-    if args.s:
-        single_run(args.s[0], args.s[1])
-    elif args.f:
-        single_run_file(args.f[0], args.f[1])
+    if args.string:
+        single_run(args.string[0], args.string[1], args.t)
+    elif args.file:
+        single_run_file(args.file[0], args.file[1], args.t)
