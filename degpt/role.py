@@ -17,6 +17,7 @@ import signal
 from enum import Enum, unique
 from typing import Optional, Dict, List, Tuple
 from cinspector.interfaces import CCode
+from cinspector.nodes import Util
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(DIR, '.'))
@@ -154,6 +155,31 @@ class Advisor(Role):
 
     """ ============= Define the processing methods in the following ============== """
 
+    @staticmethod
+    def _replace_variable_name(old_new_dic, code) -> str:
+        cc = CCode(code)
+        ids = cc.get_by_type_name('identifier')
+        old_names = list(old_new_dic.keys())
+
+        for id in ids:
+            s_pos = Util.point2index(code, id.start_point[0], id.start_point[1])
+            assert (s_pos)
+            e_pos = Util.point2index(code, id.end_point[0], id.end_point[1])
+            assert (e_pos)
+            if str(id) in old_names:
+                code = code[:s_pos] + old_new_dic[str(id)] + code[e_pos:]
+                return code
+        return code
+
+    @staticmethod
+    def replace_variable_name(old_new_dic, code) -> str:
+        last_code = None
+        while last_code != code:
+            last_code = code
+            code = Advisor._replace_variable_name(old_new_dic, code)
+
+        return code
+
     def _rename_var(self, code: str, response: Optional[str] = None) -> Tuple[str, str]:
         """
         Rename the variables in the code
@@ -180,23 +206,10 @@ class Advisor(Role):
             logger.warning(f"Fail to rename variables since the response is not valid JSON: {response}")
             return (code, response)
 
-        # do replacement, currently we perform very simple replacement
-        # TODO: replace by identifying vairables first by cinspector
         old_new_dic = json.loads(response)
-        try:
-            """ get all invocation name """
-            cc = CCode(code)
-            call_exps = cc.get_by_type_name('call_expression')
-            callees = []
-            for exp in call_exps:
-                if exp.function:
-                    callees.append(exp.function.src)
 
-            for k, v in old_new_dic.items():
-                # avoid rename the callee
-                if k in callees:
-                    continue
-                code = code.replace(k, v)
+        try:
+            code = self.replace_variable_name(old_new_dic, code)
         except Exception as e:
             logger.warning(e)
             return (code, response)
