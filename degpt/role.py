@@ -21,7 +21,8 @@ from cinspector.nodes import Util
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(DIR, '.'))
-from util import Log, is_code_in_response, response_filter
+OUTPUT_DIR = os.path.join(os.path.dirname(DIR), 'output')
+from util import Log, is_code_in_response, response_filter, check_dir, get_output_filenames
 from mssc import SemanticComparison
 from chat import QueryChatGPT, llm_configured, load_config
 
@@ -672,8 +673,12 @@ def single_run(decompile_code: str, output: str, opt_type: str) -> None:
         print(traceback.format_exc())
         return
 
-    with open(output, 'w') as w:
+    output_json, output_opt_c = get_output_filenames(output)
+    with open(os.path.join(OUTPUT_DIR, output_json), 'w') as w:
         json.dump(dic, w, indent=4)
+    
+    with open(os.path.join(OUTPUT_DIR, output_opt_c), 'w') as f:
+        f.write(dic['output'])
 
     print('='*10 + 'after optimization' + '='*10)
     print(dic['output'])
@@ -692,8 +697,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='DeGPT: Optimizing Decompiler Output with LLM')
     parser.add_argument('-t', choices = ['rename', 'simplify', 'comment', 'all'], default='all', help='Assign the optimization type')
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-s', '--string', nargs=2, metavar=('decompiler_str', 'output_json'), help='Optimize the decompiler_str')
-    group.add_argument('-f', '--file', nargs=2, metavar=('decompiler_file', 'output_json'), help='Optimize the content of the file decompiler_file')
+    group.add_argument('-s', '--string', nargs=2, metavar=('decompiler_str', 'output_name'), help='Optimize the decompiler_str and save to %s/'%OUTPUT_DIR)
+    group.add_argument('-f', '--file', nargs=2, metavar=('decompiler_file', 'output_name'), help='Optimize the content of the file decompiler_file and save to %s/'%OUTPUT_DIR)
     args = parser.parse_args()
     return args
 
@@ -703,6 +708,8 @@ if __name__ == '__main__':
     if not llm_configured():
         print('please complete llm access setup first...')
         exit()
+
+    check_dir(OUTPUT_DIR)
 
     args = parse_arguments()
     if args.string:

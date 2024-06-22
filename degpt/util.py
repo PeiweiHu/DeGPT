@@ -12,6 +12,39 @@ FILE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(FILE_DIR, 'log.log')
 
 
+def check_dir(d: str) -> bool:
+    if os.path.isdir(d):
+        return True
+    else:
+        try:
+            os.makedirs(d)
+            return True
+        except:
+            return False
+
+
+def get_output_filenames(output_name: str) -> Tuple[str, str]:
+    """
+    Generate the output filenames based on the provided output name.
+    
+    Args:
+        output_name (str): The base name for the output files.
+        
+    Returns:
+        tuple: A tuple containing the JSON filename and the C filename with '_opt' suffix.
+    """
+    output_name = os.path.basename(output_name)
+    if output_name.endswith('.json'):
+        output_name_base = output_name[:-5]
+    else:
+        output_name_base = output_name
+    
+    json_filename = f"{output_name_base}.json"
+    opt_c_filename = f"{output_name_base}_opt.c"
+    
+    return json_filename, opt_c_filename
+
+
 def halstead_metric(code: str) -> Optional[Dict[str, float]]:
     """
     calculate Halstead Complexity Metrics
