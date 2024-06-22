@@ -23,7 +23,7 @@ def check_dir(d: str) -> bool:
             return False
 
 
-def get_output_filenames(output_name: str):
+def get_output_filenames(output_name: str) -> Tuple[str, str]:
     """
     Generate the output filenames based on the provided output name.
     
