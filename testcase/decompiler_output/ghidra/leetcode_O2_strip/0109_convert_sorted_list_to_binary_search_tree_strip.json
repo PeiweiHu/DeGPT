@@ -1,0 +1,20 @@
+{
+    "00101020": "\nvoid FUN_00101020(void)\n\n{\n                    /* WARNING: Treating indirect jump as call */\n  (*(code *)PTR_00103fd0)();\n  return;\n}\n\n", 
+    "00101130": "\nvoid thunk_FUN_001010b0(void)\n\n{\n  FUN_001010b0();\n  return;\n}\n\n", 
+    "00101000": "\nvoid __DT_INIT(void)\n\n{\n  if (PTR___gmon_start___00103fe8 != (undefined *)0x0) {\n    (*(code *)PTR___gmon_start___00103fe8)();\n  }\n  return;\n}\n\n", 
+    "00105000": "\n/* WARNING: Control flow encountered bad instruction data */\n\nvoid _ITM_deregisterTMCloneTable(void)\n\n{\n                    /* WARNING: Bad instruction - Truncating control flow here */\n  halt_baddata();\n}\n\n", 
+    "00101050": "\nvoid FUN_00101050(undefined8 param_1,undefined8 param_2,undefined8 param_3)\n\n{\n  undefined8 unaff_retaddr;\n  undefined auStack_8 [8];\n  \n  (*(code *)PTR___libc_start_main_00103fe0)\n            (FUN_00101040,unaff_retaddr,&stack0x00000008,FUN_00101150,FUN_001011c0,param_3,auStack_8\n            );\n  do {\n                    /* WARNING: Do nothing block with infinite loop */\n  } while( true );\n}\n\n", 
+    "00101040": "\nundefined8 FUN_00101040(void)\n\n{\n  return 0;\n}\n\n", 
+    "00101150": "\nvoid FUN_00101150(undefined4 param_1,undefined8 param_2,undefined8 param_3)\n\n{\n  long lVar1;\n  \n  __DT_INIT();\n  lVar1 = 0;\n  do {\n    (*(code *)(&__DT_INIT_ARRAY)[lVar1])(param_1,param_2,param_3);\n    lVar1 = lVar1 + 1;\n  } while (lVar1 != 1);\n  return;\n}\n\n", 
+    "00105020": "\n/* WARNING: Control flow encountered bad instruction data */\n\nvoid __cxa_finalize(void)\n\n{\n                    /* WARNING: Bad instruction - Truncating control flow here */\n  halt_baddata();\n}\n\n", 
+    "00101030": "\nvoid __cxa_finalize(void)\n\n{\n  (*(code *)PTR___cxa_finalize_00103ff8)();\n  return;\n}\n\n", 
+    "00101140": "\nundefined8 FUN_00101140(void)\n\n{\n  return 0;\n}\n\n", 
+    "00105010": "\n/* WARNING: Control flow encountered bad instruction data */\n\nvoid __gmon_start__(void)\n\n{\n                    /* WARNING: Bad instruction - Truncating control flow here */\n  halt_baddata();\n}\n\n", 
+    "001011c8": "\nvoid __DT_FINI(void)\n\n{\n  return;\n}\n\n", 
+    "00101080": "\n/* WARNING: Removing unreachable block (ram,0x00101093) */\n/* WARNING: Removing unreachable block (ram,0x0010109f) */\n\nvoid FUN_00101080(void)\n\n{\n  return;\n}\n\n", 
+    "001010b0": "\n/* WARNING: Removing unreachable block (ram,0x001010d4) */\n/* WARNING: Removing unreachable block (ram,0x001010e0) */\n\nvoid FUN_001010b0(void)\n\n{\n  return;\n}\n\n", 
+    "001011c0": "\nvoid FUN_001011c0(void)\n\n{\n  return;\n}\n\n", 
+    "001010f0": "\nvoid FUN_001010f0(void)\n\n{\n  if (DAT_00104010 == '\\0') {\n    if (PTR___cxa_finalize_00103ff8 != (undefined *)0x0) {\n      __cxa_finalize(PTR_LOOP_00104008);\n    }\n    FUN_00101080();\n    DAT_00104010 = 1;\n    return;\n  }\n  return;\n}\n\n", 
+    "00105008": "\n/* WARNING: Control flow encountered bad instruction data */\n\nvoid __libc_start_main(void)\n\n{\n                    /* WARNING: Bad instruction - Truncating control flow here */\n  halt_baddata();\n}\n\n", 
+    "00105018": "\n/* WARNING: Control flow encountered bad instruction data */\n\nvoid _ITM_registerTMCloneTable(void)\n\n{\n                    /* WARNING: Bad instruction - Truncating control flow here */\n  halt_baddata();\n}\n\n"
+}
